@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>JARVIS ARCHITECTURE v1.0</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Inter:wght@300;400;700&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    /* IRON GHOST - PROFESSIONAL THEME */
+    :root {
+      --stark-cyan: #d1f7ff;
+      --stark-blue: rgba(0, 212, 255, 0.9);
+      --stark-glass: rgba(0, 10, 20, 0.4);
+      --stark-border: rgba(0, 212, 255, 0.2);
+    }
+
+    body {
+      background-color: #0E1117; /* Solid Robotic Dark (Item 9) */
+      color: var(--stark-cyan);
+      font-family: 'Outfit', sans-serif;
+      margin: 0;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    #input_video {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -2;
+      transform: scaleX(-1);
+    }
+
+    #hudCanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    /* HELMET PERIPHERY FRAME */
+    .helmet-frame {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 100;
+      opacity: 0.6;
+    }
+
+    /* SPEECH WAVEFORM */
+    #jarvisWaveform {
+      position: fixed;
+      bottom: 5vh;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 250px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      z-index: 1000;
+      opacity: 0;
+      transition: opacity 0.5s;
+    }
+
+    .wave-bar {
+      width: 3px;
+      background: var(--stark-blue);
+      border-radius: 2px;
+      height: 10px;
+      transition: height 0.1s;
+    }
+
+    /* NEURAL CURSOR */
+    #neuralCursor {
+      position: fixed;
+      width: 40px;
+      height: 40px;
+      border: 0.5px solid var(--stark-cyan);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 5000;
+      transform: translate(-50%, -50%);
+      display: none;
+    }
+
+    .cursor-dot {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 4px;
+      height: 4px;
+      background: #00ff88;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    /* GLASS CARD PANELS */
+    .app-panel {
+      position: absolute;
+      background: var(--stark-glass);
+      border: 0.5px solid var(--stark-border);
+      backdrop-filter: blur(8px);
+      padding: 15px;
+      z-index: 20;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+      transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Auto-hide logic for clarity */
+    body.kb-active .app-panel:not(#kbPanel),
+    body.kb-active .status-bar,
+    body.kb-active .ticker-wrap,
+    body.kb-active .helmet-frame {
+       opacity: 0.1;
+       pointer-events: none;
+    }
+
+    .section-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: var(--stark-blue);
+      border-bottom: 0.5px solid var(--stark-border);
+      padding-bottom: 5px;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+    }
+
+    /* BOOT SEQUENCE */
+    #bootOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      z-index: 9999;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .loading-text {
+      font-family: 'Orbitron';
+      font-size: 12px;
+      letter-spacing: 5px;
+      margin-bottom: 20px;
+      color: #00ff88;
+    }
+
+    .nav-tab {
+      cursor: pointer;
+      padding: 0 20px;
+      height: 44px; /* +4px height (Item 1) */
+      font-size: 10px; /* Original 9px + 1px (Item 3) */
+      font-weight: 700; /* Bold unclicked (Item 2) */
+      border: 1px solid var(--stark-border);
+      transition: all 0.3s;
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 15, 25, 0.8); /* Darker unclicked bg (Item 5) */
+    }
+
+    .nav-tab.active {
+      background: var(--stark-blue);
+      color: #000;
+      font-weight: 600; /* Semi-bold when clicked (Item 4) */
+      font-size: 9px; /* Original size when clicked (Item 4) */
+    }
+
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, rgba(0, 212, 255, 0.3), transparent);
+    }
+
+    /* Arc reactor decoration */
+    .arc-reactor {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 60px;
+      height: 60px;
+      z-index: 1;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #000;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(0, 212, 255, 0.3);
+      border-radius: 2px;
+    }
+
+    .flex-center {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+
+    .login-box {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #startBtn {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1000;
+      padding: 20px 40px;
+      background: rgba(0, 212, 255, 0.1);
+      border: 2px solid #00d4ff;
+      color: #00d4ff;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    #kbPanel {
+      z-index: 20000 !important;
+      pointer-events: auto;
+      bottom: 2vh !important;
+    }
+
+    /* Search Bar JARVIS Style */
+    /* LASER SCANNER LINE */
+    #laserScanner {
+      position: fixed;
+      top: -10px;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(90deg, transparent, #00ff88, transparent);
+      box-shadow: 0 0 15px #00ff88;
+      z-index: 10000;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    @keyframes laser-scan {
+      0% {
+        top: -10px;
+        opacity: 1;
+      }
+
+      100% {
+        top: 110%;
+        opacity: 1;
+      }
+    }
+
+    .scanning #laserScanner {
+      animation: laser-scan 3s linear infinite;
+      opacity: 1;
+    }
+
+    #jarvisSearch {
+      position: fixed;
+      top: 15%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 300px;
+      background: rgba(0, 212, 255, 0.1);
+      /* Brighter, no blur */
+      border: 1px solid rgba(0, 212, 255, 0.4);
+      padding: 20px;
+      border-radius: 4px;
+      z-index: 500;
+      text-align: center;
+      clip-path: polygon(10% 0, 100% 0, 90% 100%, 0% 100%);
+    }
+
+    /* MECHANICAL HARDWARE BRACKETS */
+    .mech-bracket {
+      position: fixed;
+      width: 100px;
+      height: 100px;
+      border-color: rgba(0, 212, 255, 0.4);
+      border-style: solid;
+      pointer-events: none;
+      z-index: 1000;
+      filter: drop-shadow(0 0 5px rgba(0, 212, 255, 0.2));
+    }
+
+    .top-left {
+      top: 10px;
+      left: 10px;
+      border-width: 2px 0 0 2px;
+    }
+
+    .top-right {
+      top: 10px;
+      right: 10px;
+      border-width: 2px 2px 0 0;
+    }
+
+    .bot-left {
+      bottom: 10px;
+      left: 10px;
+      border-width: 0 0 2px 2px;
+    }
+
+    .bot-right {
+      bottom: 10px;
+      right: 10px;
+      border-width: 0 2px 2px 0;
+    }
+
+    .key {
+      padding: 8px;
+      border: 0.5px solid var(--stark-border);
+      font-size: 10px;
+      text-align: center;
+      cursor: pointer;
+      background: rgba(0, 212, 255, 0.05);
+    }
+
+    .key:hover {
+      background: var(--stark-blue);
+      color: #000;
+    }
+
+    #jarvisSearch input {
+      width: 80%;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid #00ff88;
+      color: #00ff88;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 14px;
+      text-align: center;
+      outline: none;
+      letter-spacing: 2px;
+    }
+
+    .search-btn-jarvis {
+      margin-top: 15px;
+      background: transparent;
+      border: 1px solid #00d4ff;
+      color: #00d4ff;
+      padding: 5px 20px;
+      font-family: 'Share Tech Mono', monospace;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    .search-btn-jarvis:hover {
+      background: rgba(0, 212, 255, 0.2);
+      box-shadow: 0 0 15px #00d4ff;
+    }
+
+    /* APP PANELS */
+    .app-panel {
+      position: absolute;
+      background: rgba(0, 10, 20, 0.7);
+      border: 1px solid rgba(0, 212, 255, 0.6);
+      padding: 15px;
+      border-radius: 4px;
+      z-index: 100;
+      transition: opacity 0.4s, transform 0.4s, left 0.4s, top 0.4s;
+      box-shadow: 0 0 10px rgba(0, 212, 255, 0.1);
+    }
+
+    .app-panel:hover {
+      border-color: #00ff88;
+      background: rgba(0, 10, 20, 0.85);
+    }
+
+    /* Calculator */
+    #calcPanel {
+      bottom: 50px;
+      right: 50px;
+      width: 220px;
+    }
+
+    .calc-screen {
+      background: rgba(0, 0, 0, 0.5);
+      color: #00ff88;
+      padding: 10px;
+      text-align: right;
+      font-size: 18px;
+      margin-bottom: 10px;
+      border: 1px solid rgba(0, 212, 255, 0.2);
+    }
+
+    .calc-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5px;
+    }
+
+    .calc-btn {
+      background: rgba(0, 212, 255, 0.1);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      color: #00d4ff;
+      padding: 10px;
+      text-align: center;
+      cursor: pointer;
+      font-size: 12px;
+      transition: 0.2s;
+    }
+
+    .calc-btn:hover {
+      background: rgba(0, 212, 255, 0.3);
+    }
+
+    .calc-btn.active {
+      background: #00d4ff;
+      color: #000;
+    }
+
+    /* Weather */
+    #weatherPanel {
+      top: 150px;
+      left: 50px;
+      width: 200px;
+    }
+
+    .weather-temp {
+      font-size: 32px;
+      font-family: 'Orbitron', sans-serif;
+      color: #fff;
+    }
+
+    .weather-desc {
+      font-size: 10px;
+      color: rgba(0, 212, 255, 0.6);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    /* VIRTUAL KEYBOARD */
+    #kbPanel {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      background: rgba(0, 5, 10, 0.6);
+      /* Dimmer & more transparent */
+      border: 1px solid rgba(0, 212, 255, 0.2);
+      /* Subtle border */
+      padding: 15px;
+      border-radius: 4px;
+      z-index: 1000;
+    }
+
+    .kb-row {
+      display: flex;
+      justify-content: center;
+      gap: 5px;
+      margin-bottom: 5px;
+    }
+
+    .key {
+      background: rgba(0, 212, 255, 0.1);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      color: #00d4ff;
+      padding: 15px;
+      /* More padding */
+      min-width: 50px;
+      text-align: center;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 16px;
+      cursor: pointer;
+      transition: 0.1s;
+    }
+
+    .key:hover {
+      background: rgba(0, 212, 255, 0.2);
+    }
+
+    .key.active {
+      background: #00ff88;
+      color: #000;
+      box-shadow: 0 0 15px #00ff88;
+    }
+
+    .key.wide {
+      min-width: 100px;
+    }
+
+    /* Instructions Overlay */
+    #instructions {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      transition: opacity 0.5s;
+    }
+
+    .inst-card {
+      background: rgba(0, 212, 255, 0.05);
+      border: 1px solid #00d4ff;
+      padding: 40px;
+      text-align: center;
+      max-width: 500px;
+    }
+
+    .gest-icon {
+      font-size: 60px;
+      margin-bottom: 20px;
+      display: block;
+    }
+
+    /* SEARCH RESULTS */
+    #searchResults {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 80%;
+      max-width: 600px;
+      background: rgba(0, 10, 20, 0.9);
+      border: 1px solid #00d4ff;
+      padding: 30px;
+      z-index: 1500;
+      color: #fff;
+    }
+
+    .result-item {
+      margin-bottom: 20px;
+      border-left: 2px solid #00ff88;
+      padding-left: 15px;
+      animation: slide-in 0.5s ease-out;
+    }
+
+    @keyframes slide-in {
+      from {
+        opacity: 0;
+        transform: translateX(-20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    .result-title {
+      font-family: 'Orbitron', sans-serif;
+      color: #00ff88;
+      font-size: 16px;
+      margin-bottom: 5px;
+    }
+
+    .result-link {
+      color: rgba(0, 212, 255, 0.6);
+      font-size: 10px;
+      margin-bottom: 8px;
+    }
+
+    .result-desc {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.8);
+      line-height: 1.4;
+    }
+
+    /* MOBILE OPTIMIZATION */
+    @media (max-width: 768px) {
+      .header-title {
+        font-size: 16px;
+        letter-spacing: 2px;
+      }
+
+      .status-bar {
+        font-size: 7px;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 5px;
+      }
+
+      .app-panel {
+        width: 90% !important;
+        left: 5% !important;
+        right: auto !important;
+        margin-bottom: 10px;
+        position: relative !important;
+        top: auto !important;
+        bottom: auto !important;
+      }
+
+      #kbPanel {
+        width: 95%;
+      }
+
+      .key {
+        padding: 10px;
+        min-width: 30px;
+        font-size: 12px;
+      }
+
+      #jarvisSearch {
+        width: 90%;
+        top: 10%;
+      }
+
+      .hud-container {
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .arc-reactor {
+        position: relative;
+        top: 0;
+        right: 0;
+        margin-bottom: 20px;
+      }
+    }
+
+    .swipe-indicator {
+      position: fixed;
+      bottom: 10%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Orbitron', sans-serif;
+      font-size: 10px;
+      color: #00ff88;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      z-index: 100;
+      opacity: 0.8;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- HARDWARE OVERLAYS -->
+  <div class="mech-bracket top-left"></div>
+  <div class="mech-bracket top-right"></div>
+  <div class="mech-bracket bot-left"></div>
+  <div class="mech-bracket bot-right"></div>
+
+  <!-- HELMET FRAME SVG ( Professional Peripheral Framing ) -->
+  <svg class="helmet-frame" viewBox="0 0 1000 1000" preserveAspectRatio="none">
+    <!-- Main Frame Brackets -->
+    <path d="M50,100 L50,50 L100,50 M900,50 L950,50 L950,100 M950,900 L950,950 L900,950 M100,950 L50,950 L50,900" 
+      fill="none" stroke="rgba(0, 212, 255, 0.4)" stroke-width="2" />
+    
+    <!-- Flight Paths / Peripheral Data -->
+    <path d="M100,200 Q300,100 500,200" fill="none" stroke="rgba(0, 255, 136, 0.2)" stroke-width="1" stroke-dasharray="10,5">
+       <animate attributeName="stroke-dashoffset" from="100" to="0" dur="5s" repeatCount="indefinite" />
+    </path>
+    <path d="M900,800 Q700,900 500,800" fill="none" stroke="rgba(255, 0, 85, 0.2)" stroke-width="1" stroke-dasharray="5,5">
+       <animate attributeName="stroke-dashoffset" from="0" to="100" dur="8s" repeatCount="indefinite" />
+    </path>
+    
+    <!-- Target Plane Icons -->
+    <g transform="translate(150, 150) rotate(-45)">
+       <path d="M0,0 L10,5 L0,10 Z" fill="rgba(0, 212, 255, 0.6)" />
+       <text x="15" y="8" fill="#00d4ff" font-size="8">TGT_B_747</text>
+    </g>
+    <g transform="translate(850, 750) rotate(135)">
+       <path d="M0,0 L10,5 L0,10 Z" fill="rgba(255, 0, 85, 0.6)" />
+       <text x="15" y="8" fill="#ff0055" font-size="8">TGT_UAV_X9</text>
+    </g>
+  </svg>
+
+  <video id="input_video" autoplay playsinline class="hidden"></video>
+  <canvas id="hudCanvas"></canvas>
+
+  <div id="neuralCursor">
+    <div class="cursor-dot"></div>
+  </div>
+
+  <!-- JARVIS WAVEFORM VISUALIZER -->
+  <div id="jarvisWaveform">
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+  </div>
+
+  <div id="bootOverlay">
+    <div id="laserScanner"></div>
+    <div class="loading-text" id="bootText">INITIALIZING_JARV_CORE</div>
+    <div style="width: 300px; height: 1px; background: rgba(0,255,136,0.2); position: relative;">
+      <div id="bootProgress"
+        style="position: absolute; left: 0; width: 0%; height: 100%; background: #00ff88; transition: width 0.1s;">
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTERED LOGIN CARD -->
+  <div id="loginOverlay"
+    style="position:fixed; top:0; left:0; width:100%; height:100%; z-index:9000; background:rgba(0,0,0,0.9); display:flex; align-items:center; justify-content:center;">
+    <div class="login-box"
+      style="border:0.5px solid var(--stark-border); background:rgba(0,10,20,0.9); backdrop-filter:blur(30px); padding:60px; border-radius:10px; text-align:center;">
+      <div
+        style="font-family:'Orbitron'; font-size: 10px; color: var(--stark-blue); letter-spacing: 5px; margin-bottom:30px;">
+        STARK INDUSTRIES INTERNAL</div>
+      <input type="text" id="userName" placeholder="SCAN_IDENTIFIER" autocomplete="off"
+        style="background:transparent; border:none; border-bottom:1px solid var(--stark-blue); color:#fff; font-family:'Orbitron'; font-size:24px; text-align:center; width:300px; outline:none;" />
+      <br><br><br>
+      <button onclick="startLogin()"
+        style="background:rgba(0,212,255,0.1); border:1px solid var(--stark-blue); color:#fff; font-family:'Orbitron'; font-size:12px; padding:15px 40px; cursor:pointer; letter-spacing:3px; transition: 0.3s; box-shadow: 0 0 15px var(--stark-border);">START_BOOT_SEQUENCE</button>
+    </div>
+  </div>
+
+  <div id="authStatus"
+    style="display:none; position:fixed; top:10%; left:50%; transform:translateX(-50%); z-index:10000; font-family:'Orbitron'; color:#00ff88; letter-spacing:5px; font-size:10px;">
+    AUTH_ACTIVE</div>
+
+  <!-- HUD INTERFACE -->
+  <div class="hud-container hidden" id="mainHUD">
+    <!-- NAVIGATION -->
+    <div style="position:fixed; top:20px; left:50%; transform:translateX(-50%); display:flex; gap:10px; z-index:1000;">
+      <div class="nav-tab active" id="tab-0" onclick="setGroup(0)">A.I. HUB</div>
+      <div class="nav-tab" id="tab-1" onclick="setGroup(1)">AGENDA</div>
+      <div class="nav-tab" id="tab-2" onclick="setGroup(2)">ATMOS</div>
+      <div class="nav-tab" id="tab-3" onclick="setGroup(3)">INTEL</div>
+      <div class="nav-tab" id="tab-4" onclick="setGroup(4)">SECURE</div>
+      <div class="nav-tab" id="tab-5" onclick="setGroup(5)">CORE</div>
+    </div>
+
+    <!-- ARC CORE INDICATOR -->
+    <svg class="arc-reactor" viewBox="0 0 60 60">
+      <circle cx="30" cy="30" r="28" fill="none" stroke="rgba(0,212,255,0.2)" stroke-width="1" />
+      <circle cx="30" cy="30" r="20" fill="none" stroke="rgba(0,212,255,0.4)" stroke-width="1.5" />
+      <circle cx="30" cy="30" r="10" fill="rgba(0,212,255,0.15)" stroke="#00d4ff" stroke-width="1" />
+      <circle cx="30" cy="30" r="5" fill="#00d4ff" opacity="0.8">
+        <animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="indefinite" />
+      </circle>
+    </svg>
+
+    <div class="status-bar">
+      <span><span class="status-dot"></span>SYSTEMS ONLINE</span>
+      <span>CAM: ACTIVE</span>
+      <span>NEURAL: READY</span>
+      <span>STATUS: <span style="color:#00ff88">STABLE</span></span>
+    </div>
+
+    <!-- HUD TOOLS AREA -->
+    <div id="hudTools">
+      <!-- GROUP 1: A.I. HUB -->
+      <div class="tool-group" id="group-0">
+        <div class="app-panel" style="top: 20%; left: 5%; width: 350px;">
+          <div class="section-title">GLOBAL_NET_INTERFACE</div>
+          <input type="text" id="jarvisInput" placeholder="SYSTEM_QUERY..."
+            style="width: 100%; background: transparent; border: none; border-bottom: 1px solid var(--stark-blue); color: #fff; font-size: 16px; margin-top: 15px; outline:none;" />
+          <div id="searchStatus" style="font-size: 8px; color: #00ff88; margin-top: 10px;">SECURE_RELAY_ACTIVE</div>
+        </div>
+        <div class="app-panel" style="bottom: 15%; right: 5%; width: 400px;">
+          <div class="section-title">STARK_NEWS_WIRE</div>
+          <div class="ticker-wrap">
+            <div class="ticker">[!!!] STARK INDUSTRIES v85 INTERFACE DEPLOYED // NEURAL LINK STABLE // SCANNING ACTIVE
+              [!!!]</div>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="app-panel" style="bottom: 15%; left: 5%; width: 350px;">
+        <div class="section-title">STARK_NEWS_WIRE</div>
+        <div class="ticker-wrap">
+          <div class="ticker">[!!!] STARK INDUSTRIES ACQUIRES GLOBAL RELAY // [!] NEW ARMOR TECH v85.2 DEPLOYED // [!]
+            AVENGERS STATUS: ACTIVE // [!] WEATHER: PERFECT [!!!]</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 2: NEURALworkSCHEDULE -->
+    <div class="tool-group hidden" id="group-1">
+      <div class="app-panel" style="top: 20%; left: 50%; transform: translateX(-50%); width: 450px;">
+        <div class="section-title">NEURAL_WORK_SCHEDULE</div>
+        <div style="font-size: 10px; color:#fff;">
+           <div style="margin-bottom:15px; border-left:2px solid #00ff88; padding-left:10px;">
+              <div style="color:#00ff88; opacity:0.6;">09:00 - 11:00</div>
+              <div style="font-weight:700;">ARMOR_INTEGRITY_CALIBRATION [MK85]</div>
+           </div>
+           <div style="margin-bottom:15px; border-left:2px solid #00d4ff; padding-left:10px;">
+              <div style="color:#00d4ff; opacity:0.6;">11:30 - 13:00</div>
+              <div style="font-weight:700;">SATELLITE_UPLINK_OPTIMIZATION</div>
+           </div>
+           <div style="margin-bottom:15px; border-left:2px solid #ff0055; padding-left:10px;">
+              <div style="color:#ff0055; opacity:0.6;">15:00 - 17:00</div>
+              <div style="font-weight:700;">DEEP_LEARNING_JARVIS_UPDATE</div>
+           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 3: TACTICAL_RADAR -->
+    <div class="tool-group hidden" id="group-2">
+      <div class="app-panel" style="bottom: 25%; left: 50%; transform: translateX(-50%); width: 320px; height: 320px; border-radius: 50%; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(20px);">
+         <canvas id="radarCanvas" width="300" height="300"></canvas>
+         <div style="position:absolute; bottom:-40px; text-align:center; width:100%; font-size:10px; font-weight:700; color:#00ff88;">TACTICAL_RADAR_ACTIVE</div>
+      </div>
+    </div>
+
+    <!-- GROUP 4: TACTICAL MAP -->
+    <div class="tool-group hidden" id="group-3">
+      <div class="app-panel" style="top: 15%; left: 5%; width: 90%; height: 60vh;">
+        <div class="section-title">GLOBAL_STRATEGIC_MAP</div>
+        <canvas id="mapCanvas" style="width:100%; height:100%; border:0.5px solid var(--stark-border);"></canvas>
+      </div>
+    </div>
+
+    <!-- GROUP 5: ARMOR CONFIG -->
+    <div class="tool-group hidden" id="group-4">
+      <div class="app-panel" style="top: 20%; right: 5%; width: 450px;">
+        <div class="section-title">ARMOR_SYSTEMS_DIAGNOSTIC</div>
+        <div id="armorView"
+          style="height: 300px; display: flex; align-items: center; justify-content: center; position: relative;">
+          <div style="border:1px solid #00d4ff; width:100px; height:180px; position:relative; opacity:0.6;">
+            <div
+              style="position:absolute; top:20px; left:-40px; font-size:8px; width:40px; border-top:1px solid #00d4ff;">
+              HELMET</div>
+            <div
+              style="position:absolute; top:80px; left:-40px; font-size:8px; width:40px; border-top:1px solid #00d4ff;">
+              CHEST</div>
+            <div
+              style="position:absolute; top:120px; right:-40px; font-size:8px; width:40px; border-top:1px solid #00d4ff;">
+              LEG_L</div>
+          </div>
+          <div style="padding: 20px; font-size:10px;">
+            <div style="color:#00ff88;">[MK85] v2.0</div>
+            <div>STATUS: STABLE</div>
+            <div>POWER: 98%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUP 6: CORE -->
+    <div class="tool-group hidden" id="group-5">
+      <div class="app-panel" style="bottom: 30%; left: 5%; width: 300px;">
+        <div class="section-title">CORE_DIAGNOSTICS_SUMMARY</div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+          <div style="border-left:1px solid var(--stark-border); padding-left:10px;">
+            <div style="font-size:8px; opacity:0.5;">ARC_CORE</div>
+            <div style="font-size:12px; color:#00ff88;">98.4%</div>
+          </div>
+          <div style="border-left:1px solid var(--stark-border); padding-left:10px;">
+            <div style="font-size:8px; opacity:0.5;">CPU_LOAD</div>
+            <div style="font-size:12px;">14%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="swipe-indicator" id="swipeInd" style="bottom: 10vh; font-size: 8px; opacity: 0.5;">SWIPE_TO_NAVIGATE
+    </div>
+  </div>
+  </div>
+
+  <script>
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('hudCanvas');
+    const canvasCtx = canvasElement.getContext('2d');
+
+    const loginOverlay = document.getElementById('loginOverlay');
+    const userNameInput = document.getElementById('userName');
+    const authStatus = document.getElementById('authStatus');
+    const mainHUD = document.getElementById('mainHUD');
+    const jarvisInput = document.getElementById('jarvisInput');
+    const kbPanel = document.getElementById('kbPanel');
+    const neuralCursor = document.getElementById('neuralCursor');
+
+    let width, height;
+    let audioCtx = null;
+    let currentGroup = 0;
+    const totalGroups = 6;
+    let userName = "GUEST";
+    let isLoggedIn = false;
+    let isSpeaking = false;
+    let isListening = false;
+    let jarvisVoice = null;
+    let currentHands = [];
+    let recognition;
+    let hoverTarget = null;
+    let hoverTime = 0;
+    let wasPinching = false;
+
+    function resize() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvasElement.width = width;
+      canvasElement.height = height;
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Jarvis Voice Initialization
+    function initVoice() {
+      const voices = window.speechSynthesis.getVoices();
+      jarvisVoice = voices.find(v => v.lang.includes('en-GB')) || voices.find(v => v.lang.includes('en-US')) || voices[0];
+    }
+    window.speechSynthesis.onvoiceschanged = initVoice;
+    initVoice();
+
+    userNameInput.addEventListener('keyup', (e) => {
+      if (e.key === 'Enter') startLogin();
+    });
+
+    function speak(text) {
+      if (!window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.voice = jarvisVoice;
+      utterance.pitch = 0.85;
+      utterance.rate = 1.05;
+
+      utterance.onstart = () => {
+        document.getElementById('jarvisWaveform').style.opacity = '1';
+        isSpeaking = true;
+      };
+      utterance.onend = () => {
+        document.getElementById('jarvisWaveform').style.opacity = '0';
+        isSpeaking = false;
+      };
+
+      window.speechSynthesis.speak(utterance);
+    }
+
+    function updateWaveform() {
+      if (!isSpeaking && !isListening) return;
+      const bars = document.querySelectorAll('.wave-bar');
+      bars.forEach(bar => {
+        const height = Math.random() * 40 + 10;
+        bar.style.height = `${height}px`;
+      });
+    }
+    setInterval(updateWaveform, 100);
+
+    function startLogin() {
+      userName = userNameInput.value.trim().toUpperCase() || "STARK_AGENT";
+      loginOverlay.style.opacity = '0';
+
+      setTimeout(() => {
+        loginOverlay.classList.add('hidden');
+        runBootSequence();
+      }, 500);
+    }
+
+    function runBootSequence() {
+      const boot = document.getElementById('bootOverlay');
+      const progress = document.getElementById('bootProgress');
+      const text = document.getElementById('bootText');
+      boot.style.display = 'flex';
+
+      initAudio();
+      playBeep(400, 0.5);
+      speak("Initializing Jarvis Core. Connecting to Stark Industries global mainframe.");
+
+      let p = 0;
+      const interval = setInterval(() => {
+        p += 2;
+        progress.style.width = p + "%";
+
+        if (p === 10) document.body.classList.add('scanning');
+        if (p === 20) text.innerText = "SCRYING_THERMAL_MESH...";
+        if (p === 40) text.innerText = "BIOMETRIC_HAND_SCAN_INITIATED...";
+        if (p === 60) text.innerText = "IDENTITY_VERIFICATION_COMPLETE...";
+        if (p === 80) text.innerText = "NEURAL_LINK_ESTABLISHED...";
+
+        if (p >= 100) {
+          clearInterval(interval);
+          document.body.classList.remove('scanning');
+          boot.style.opacity = '0';
+          setTimeout(() => {
+            boot.style.display = 'none';
+            enterHUD();
+          }, 1000);
+        }
+      }, 50);
+    }
+
+    function enterHUD() {
+      isLoggedIn = true;
+      mainHUD.classList.remove('hidden');
+      videoElement.classList.remove('hidden');
+      playWhir();
+      speak(`Authentication complete. All systems are green. Welcome back, ${userName}. Standing by for your command.`);
+
+      initMediaPipe();
+      initTouchEvents();
+      requestAnimationFrame(renderLoop);
+    }
+
+    function initSpeechRecognition() {
+      if (!('webkitSpeechRecognition' in window)) return;
+      recognition = new webkitSpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event) => {
+        const text = event.results[event.results.length - 1][0].transcript.toLowerCase();
+        parseVoiceCommand(text);
+      };
+
+      recognition.onstart = () => {
+        isListening = true;
+        document.getElementById('jarvisWaveform').style.opacity = '0.4';
+      };
+      recognition.onend = () => {
+        isListening = false;
+        if (isLoggedIn) recognition.start();
+      };
+
+      recognition.start();
+    }
+
+    function parseVoiceCommand(cmd) {
+      if (cmd.includes('hello jarvis') || cmd.includes('hi jarvis')) {
+        speak("Hello " + userName + ". How can I assist you today?");
+      }
+      if (cmd.includes('agenda') || cmd.includes('briefing')) setGroup(1);
+      if (cmd.includes('weather') || cmd.includes('atmos')) setGroup(2);
+      if (cmd.includes('intel') || cmd.includes('satellite')) setGroup(3);
+      if (cmd.includes('security')) setGroup(4);
+      if (cmd.includes('system') || cmd.includes('diagnostics')) setGroup(5);
+      if (cmd.includes('home') || cmd.includes('back')) setGroup(0);
+      if (cmd.includes('search')) {
+        speak("Input recognized. Re-directing focus to global relay.");
+        setGroup(0);
+      }
+    }
+
+    async function fetchWeather(city) {
+      // Deeply integrated weather already in Module 3 (ATMOS)
+      speak("Atmospheric telemetry for " + city + " is being processed and displayed on the Atmos station.");
+    }
+
+    function initTouchEvents() {
+      let startX = 0;
+      window.addEventListener('touchstart', e => startX = e.touches[0].clientX);
+      window.addEventListener('touchend', e => {
+        const diff = e.changedTouches[0].clientX - startX;
+        if (Math.abs(diff) > 100) setGroup(currentGroup + (diff > 0 ? -1 : 1));
+      });
+    }
+
+    function initMediaPipe() {
+      const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+      hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+      hands.onResults(results => currentHands = results.multiHandLandmarks || []);
+      const camera = new Camera(videoElement, { onFrame: async () => await hands.send({ image: videoElement }), width: 1280, height: 720 });
+      camera.start();
+    }
+
+    function getProjectedCoords(pt) {
+      const mirroredX = 1.0 - pt.x;
+      const videoWidth = 1280, videoHeight = 720;
+
+      const scale = Math.max(width / videoWidth, height / videoHeight);
+      const scaledWidth = videoWidth * scale;
+      const scaledHeight = videoHeight * scale;
+
+      const offsetX = (width - scaledWidth) / 2;
+      const offsetY = (height - scaledHeight) / 2;
+
+      return {
+        x: (mirroredX * scaledWidth) + offsetX,
+        y: (pt.y * scaledHeight) + offsetY
+      };
+    }
+
+    let rotationAngle = 0;
+    function renderLoop() {
+      requestAnimationFrame(renderLoop);
+      if (isLoggedIn) {
+        drawHUD();
+        detectGestures();
+        drawRadar(rotationAngle);
+      }
+    }
+
+    function drawHUD() {
+      canvasCtx.clearRect(0, 0, width, height);
+      if (!currentHands || !currentHands.length) {
+        if (neuralCursor) neuralCursor.style.display = 'none';
+        return;
+      }
+      
+      currentHands.forEach((hand, hIdx) => {
+         const points = hand.map(pt => getProjectedCoords(pt));
+         
+         // Robotic Bones (Thicker mechanical lines)
+         canvasCtx.strokeStyle = hIdx === 0 ? 'rgba(0, 212, 255, 0.4)' : 'rgba(255, 255, 255, 0.2)';
+         canvasCtx.lineWidth = 2;
+         const connections = (typeof HAND_CONNECTIONS !== 'undefined') ? HAND_CONNECTIONS : (Hands.HAND_CONNECTIONS || []);
+         connections.forEach(([s, e]) => {
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(points[s].x, points[s].y);
+            canvasCtx.lineTo(points[e].x, points[e].y);
+            canvasCtx.stroke();
+         });
+
+         // Joint Nodes & Servo Data
+         points.forEach((p, i) => {
+            if ([4, 8, 12, 16, 20].includes(i)) {
+               // Joint Shell
+               canvasCtx.fillStyle = 'rgba(0,0,0,0.8)';
+               canvasCtx.beginPath(); canvasCtx.arc(p.x, p.y, 6, 0, Math.PI * 2); canvasCtx.fill();
+               canvasCtx.strokeStyle = hIdx === 0 ? '#00ff88' : '#00d4ff';
+               canvasCtx.stroke();
+
+               // Joint Pivot
+               canvasCtx.fillStyle = '#fff';
+               canvasCtx.beginPath(); canvasCtx.arc(p.x, p.y, 2, 0, Math.PI * 2); canvasCtx.fill();
+
+               // Data Readout
+               canvasCtx.fillStyle = hIdx === 0 ? '#00ff88' : '#00d4ff';
+               canvasCtx.font = '8px Share Tech Mono';
+               canvasCtx.fillText(`H${hIdx}_JNT_${i}: ${Math.round(hand[i].x * 100)}%`, p.x + 10, p.y - 5);
+               canvasCtx.fillText(`LOAD: 42%`, p.x + 10, p.y + 5);
+            }
+         });
+      });
+    }
+
+    function detectGestures() {
+      if (!currentHands || !currentHands.length) {
+        document.querySelectorAll('#neuralCursor, #neuralCursor2').forEach(c => c.style.display = 'none');
+        return;
+      }
+      
+      let isAnyPinching = false;
+      
+      currentHands.forEach((hand, hIdx) => {
+         let indexPt = hand[8];
+         let thumbPt = hand[4];
+         const dist = Math.hypot(thumbPt.x - indexPt.x, thumbPt.y - indexPt.y, thumbPt.z - indexPt.z);
+         const isPinchingNow = dist < 0.08;
+         if (isPinchingNow) isAnyPinching = true;
+
+         let handPos = getProjectedCoords(indexPt);
+         
+         // Dual Cursor Logic
+         const cursorId = hIdx === 0 ? 'neuralCursor' : 'neuralCursor2';
+         let cursor = document.getElementById(cursorId);
+         if (!cursor && hIdx > 0) {
+            cursor = neuralCursor.cloneNode(true);
+            cursor.id = cursorId;
+            document.body.appendChild(cursor);
+         }
+         if (cursor) {
+            cursor.style.display = 'block';
+            cursor.style.left = handPos.x + 'px';
+            cursor.style.top = handPos.y + 'px';
+            cursor.style.borderColor = isPinchingNow ? '#ff0055' : (hIdx === 0 ? '#00ff88' : '#00d4ff');
+         }
+
+         document.querySelectorAll('.nav-tab, button, input, .key').forEach(el => {
+            const rect = el.getBoundingClientRect();
+            if (handPos.x > rect.left && handPos.x < rect.right && handPos.y > rect.top && handPos.y < rect.bottom) {
+               if (isPinchingNow && !wasPinching) {
+                  el.click();
+                  if (el.tagName === 'INPUT') { el.focus(); openKeyboard(); }
+                  playBeep(1200, 0.1);
+               }
+            }
+         });
+
+         if (isPinchingNow) {
+            const thumbPos = getProjectedCoords(thumbPt);
+            canvasCtx.strokeStyle = '#ff0055';
+            canvasCtx.lineWidth = 2;
+            canvasCtx.beginPath(); canvasCtx.moveTo(handPos.x, handPos.y); canvasCtx.lineTo(thumbPos.x, thumbPos.y); canvasCtx.stroke();
+            
+            // ROTATION GESTURE (Item 2)
+            if (wasPinching) {
+               const dx = hand[8].x - lastHandPos[hIdx].x;
+               rotationAngle += dx * 5; // Sensitivity
+            }
+         }
+         lastHandPos[hIdx] = {x: hand[8].x, y: hand[8].y};
+      });
+
+      wasPinching = isAnyPinching;
+    }
+
+    let lastHandPos = [{}, {}];
+
+    function setGroup(n) {
+      if (n < 0) n = 5;
+      if (n > 5) n = 0;
+
+      playBeep(400 + (n * 50), 0.1);
+      document.querySelectorAll('.tool-group').forEach(g => g.classList.add('hidden'));
+      const nextGroup = document.getElementById(`group-${n}`);
+      if (nextGroup) nextGroup.classList.remove('hidden');
+
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+      const nextTab = document.getElementById(`tab-${n}`);
+      if (nextTab) nextTab.classList.add('active');
+
+      currentGroup = n;
+      const labels = ["A.I. HUB", "AGENDA", "ATMOS", "INTEL", "SECURE", "CORE"];
+      speak("Switching to " + labels[n]);
+    }
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    function playBeep(freq, dur) {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+      osc.start();
+      osc.stop(audioCtx.currentTime + dur);
+    }
+
+    function playWhir(startF = 200, endF = 600, dur = 0.3) {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.frequency.setValueAtTime(startF, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(endF, audioCtx.currentTime + dur);
+      gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + dur);
+      osc.start();
+      osc.stop(audioCtx.currentTime + dur);
+    }
+
+    function playClick() {
+      playBeep(2400, 0.02);
+    }
+
+    // DRAW TACTICAL MAP
+    function drawMap() {
+      const ctx = document.getElementById('mapCanvas')?.getContext('2d');
+      if (!ctx) return;
+      const w = ctx.canvas.width = ctx.canvas.offsetWidth;
+      const h = ctx.canvas.height = ctx.canvas.offsetHeight;
+      ctx.clearRect(0, 0, w, h);
+
+      ctx.strokeStyle = 'rgba(0, 212, 255, 0.2)';
+      ctx.lineWidth = 0.5;
+      for (let i = 0; i < w; i += 20) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, h); ctx.stroke(); }
+      for (let i = 0; i < h; i += 20) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(w, i); ctx.stroke(); }
+
+      ctx.strokeStyle = '#00ff88';
+      ctx.beginPath();
+      ctx.arc(w / 2, h / 2, 50 + Math.sin(Date.now() * 0.002) * 10, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = '#00d4ff';
+      ctx.font = '10px Orbitron';
+      ctx.fillText("TACTICAL_SURVEILLANCE_ACTIVE", 10, 20);
+    }
+
+    setInterval(drawMap, 50);
+
+    function handleKb(key) {
+      playBeep(800, 0.05);
+      const targetInput = document.getElementById('jarvisInput');
+      if (key === 'BACKSPACE') targetInput.value = targetInput.value.slice(0, -1);
+      else if (key === 'ENTER') {
+        speak("Processing command sequence for " + targetInput.value);
+        closeKeyboard();
+      }
+      else targetInput.value += key;
+    }
+
+    function openKeyboard() {
+       kbPanel.classList.remove('hidden');
+       document.body.classList.add('kb-active');
+       speak("Virtual input interface deployed.");
+    }
+
+    function closeKeyboard() {
+       kbPanel.classList.add('hidden');
+       document.body.classList.remove('kb-active');
+    }
+
+    // Init Keyboard
+    const kbRows = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
+    kbRows.forEach((row, i) => {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'kb-row';
+      row.split('').forEach(char => {
+        const keyEl = document.createElement('div');
+        keyEl.className = 'key';
+        keyEl.innerText = char;
+        keyEl.onclick = () => handleKb(char);
+        rowEl.appendChild(keyEl);
+      });
+      document.getElementById('keyboardRows')?.appendChild(rowEl);
+    });
+
+    // DRAW RADAR (New Tactical Tool)
+    function drawRadar() {
+       const canvas = document.getElementById('radarCanvas');
+       if (!canvas) return;
+       const ctx = canvas.getContext('2d');
+       const w = canvas.width, h = canvas.height;
+       ctx.clearRect(0,0,w,h);
+       
+       const cx = w/2, cy = h/2, r = 130;
+       
+       // Grid Rings
+       ctx.strokeStyle = 'rgba(0, 212, 255, 0.15)';
+       ctx.lineWidth = 1;
+       [0.2, 0.5, 0.8, 1].forEach(pct => {
+          ctx.beginPath(); ctx.arc(cx, cy, r * pct, 0, Math.PI*2); ctx.stroke();
+       });
+       
+       // Sweep Animation
+       ctx.save();
+       const angle = (Date.now() * 0.003 + (rotationAngle || 0)) % (Math.PI * 2);
+       const gradient = ctx.createConicGradient(angle, cx, cy);
+       gradient.addColorStop(0, 'rgba(0, 255, 136, 0.4)');
+       gradient.addColorStop(0.1, 'rgba(0, 255, 136, 0.1)');
+       gradient.addColorStop(0.2, 'transparent');
+       
+       ctx.fillStyle = gradient;
+       ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+       ctx.restore();
+       
+       // Blips (Ghost signatures)
+       ctx.fillStyle = '#ff0055';
+       const time = Date.now() * 0.001;
+       const blips = [
+          {x: cx + Math.cos(time)*60, y: cy + Math.sin(time)*60},
+          {x: cx - 40, y: cy - 80}
+       ];
+       blips.forEach(b => {
+          ctx.globalAlpha = 0.5 + Math.sin(Date.now()*0.01)*0.5;
+          ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2); ctx.fill();
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.arc(b.x, b.y, 10, 0, Math.PI*2); ctx.stroke();
+       });
+       ctx.globalAlpha = 1;
+    }
+
+    // DRAW TACTICAL MAP (Advanced Peripheral Visualization)
+    function drawMap() {
+       const ctx = document.getElementById('mapCanvas')?.getContext('2d');
+       if (!ctx) return;
+       const w = ctx.canvas.width = ctx.canvas.offsetWidth;
+       const h = ctx.canvas.height = ctx.canvas.offsetHeight;
+       ctx.clearRect(0,0,w,h);
+       
+       // Center Zoom (Item 8)
+       const zoom = 1.1;
+       ctx.save();
+       ctx.translate(w/2, h/2);
+       ctx.scale(zoom, zoom);
+       ctx.translate(-w/2, -h/2);
+
+       ctx.strokeStyle = 'rgba(0, 212, 255, 0.2)';
+       ctx.lineWidth = 2; // +1px thicker (Item 6)
+       for(let i=0; i<w; i+=40) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,h); ctx.stroke(); }
+       for(let i=0; i<h; i+=40) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(w,i); ctx.stroke(); }
+       
+       // Main Focus Circle (Item 7)
+       ctx.strokeStyle = '#00ff88';
+       ctx.lineWidth = 3;
+       ctx.beginPath();
+       ctx.arc(w/2, h/2, 70, 0, Math.PI*2); // Enlarged focus
+       ctx.stroke();
+       
+       // Floating Data
+       ctx.fillStyle = 'rgba(0, 212, 255, 0.6)';
+       ctx.font = '10px Share Tech Mono';
+       ctx.fillText("COORD_X: " + Math.round(Math.random()*1000), 20, 40);
+       ctx.fillText("COORD_Y: " + Math.round(Math.random()*1000), 20, 55);
+       
+       ctx.restore();
+    }
+    
+    // Refresh map at 10fps
+    setInterval(drawMap, 100);
+  </script>
+</body>
+
+</html>
